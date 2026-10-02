@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>OmniLab - Interactive Science & Math</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        header { background: #1e293b; padding: 15px; text-align: center; border-bottom: 2px solid #38bdf8; }
+        header h1 { font-size: 1.4rem; color: #38bdf8; }
+
+        nav { display: flex; justify-content: space-around; background: #334155; padding: 10px; }
+        nav button { background: none; border: none; color: #94a3b8; font-weight: bold; font-size: 0.9rem; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+        nav button.active { background: #0284c7; color: #fff; }
+
+        .tab-content { flex: 1; display: none; position: relative; width: 100%; height: 100%; }
+        .tab-content.active { display: flex; flex-direction: column; }
+
+        /* Controls Panel */
+        .controls { background: #1e293b; padding: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 0.85rem; }
+        .controls label { display: flex; flex-direction: column; gap: 4px; color: #cbd5e1; }
+        .controls input[type="range"] { accent-color: #38bdf8; }
+
+        canvas { flex: 1; width: 100%; height: 100%; touch-action: none; }
+
+        /* Formula Info Overlay */
+        .info-card { position: absolute; top: 10px; left: 10px; background: rgba(15, 23, 42, 0.85); padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; pointer-events: none; max-width: 80%; }
+        .info-card h3 { font-size: 0.95rem; color: #38bdf8; margin-bottom: 4px; }
+        .info-card p { font-size: 0.8rem; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>OmniLab Science Visualizer</h1>
+    </header>
+
+    <nav>
+        <button id="btnPhysics" class="active" onclick="switchTab('physics')">Physics Simulation</button>
+        <button id="btnMath" onclick="switchTab('math')">4D Geometry</button>
+        <button id="btnGraph" onclick="switchTab('graph')">Math Grapher</button>
+    </nav>
+
+    <!-- TAB 1: PHYSICS PENDULUM -->
+    <div id="physics" class="tab-content active">
+        <div class="info-card">
+            <h3>Simple Pendulum Motion</h3>
+            <p>Formula: T = 2π √(L / g)</p>
+        </div>
+        <canvas id="physicsCanvas"></canvas>
+        <div class="controls">
+            <label>Gravity (g): <input type="range" id="gravSlider" min="1" max="25" value="9.8" step="0.1"></label>
+            <label>Length (L): <input type="range" id="lenSlider" min="50" max="250" value="150"></label>
+        </div>
+    </div>
+
+    <!-- TAB 2: 4D HYPERCUBE -->
+    <div id="math" class="tab-content">
+        <div class="info-card">
+            <h3>4D Tesseract Projection</h3>
+            <p>Swipe on screen to rotate a 4-dimensional hypercube in 3D space.</p>
+        </div>
+        <div id="tesseractContainer" style="width:100%; height:100%;"></div>
+    </div>
+
+    <!-- TAB 3: MATH FUNCTION GRAPHER -->
+    <div id="graph" class="tab-content">
+        <div class="controls">
+            <label>Select Function:
+                <select id="funcSelect" style="padding:4px; border-radius:4px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                    <option value="sin">y = sin(x)</option>
+                    <option value="square">y = x²</option>
+                    <option value="wave">y = sin(x) + cos(2x)</option>
+                </select>
+            </label>
+        </div>
+        <canvas id="graphCanvas"></canvas>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            if(tabId === 'physics') document.getElementById('btnPhysics').classList.add('active');
+            if(tabId === 'math') {
+                document.getElementById('btnMath').classList.add('active');
+                init4D();
+            }
+            if(tabId === 'graph') {
+                document.getElementById('btnGraph').classList.add('active');
+                drawGraph();
+            }
+        }
+
+        /* --- 1. PHYSICS PENDULUM ENGINE --- */
+        const pCanvas = document.getElementById('physicsCanvas');
+        const pCtx = pCanvas.getContext('2d');
+        let angle = Math.PI / 4;
+        let aVelocity = 0;
+        let aAcceleration = 0;
+
+        function resizeCanvas() {
+            pCanvas.width = pCanvas.clientWidth;
+            pCanvas.height = pCanvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function animatePendulum() {
+            pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+            
+            let g = parseFloat(document.getElementById('gravSlider').value) * 0.05;
+            let len = parseFloat(document.getElementById('lenSlider').value);
+            let originX = pCanvas.width / 2;
+            let originY = 80;
+
+            aAcceleration = (-1 * g / len) * Math.sin(angle);
+            aVelocity += aAcceleration;
+            aVelocity *= 0.995; // Dampening
+            angle += aVelocity;
+
+            let x = originX + len * Math.sin(angle);
+            let y = originY + len * Math.cos(angle);
+
+            // Draw Rod
+            pCtx.beginPath();
+            pCtx.strokeStyle = '#38bdf8';
+            pCtx.lineWidth = 3;
+            pCtx.moveTo(originX, originY);
+            pCtx.lineTo(x, y);
+            pCtx.stroke();
+
+            // Draw Bob
+            pCtx.beginPath();
+            pCtx.arc(x, y, 20, 0, Math.PI * 2);
+            pCtx.fillStyle = '#f43f5e';
+            pCtx.fill();
+            pCtx.strokeStyle = '#fff';
+            pCtx.stroke();
+
+            requestAnimationFrame(animatePendulum);
+        }
+        animatePendulum();
+
+        /* --- 2. 4D HYPERCUBE (THREE.JS) --- */
+        let tInit = false;
+        function init4D() {
+            if(tInit) return;
+            tInit = true;
+            
+            const container = document.getElementById('tesseractContainer');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            camera.position.z = 4;
+
+            // 4D Vertices
+            const nodes = [
+                [-1,-1,-1,-1],[1,-1,-1,-1],[1,1,-1,-1],[-1,1,-1,-1],
+                [-1,-1,1,-1],[1,-1,1,-1],[1,1,1,-1],[-1,1,1,-1],
+                [-1,-1,-1,1],[1,-1,-1,1],[1,1,-1,1],[-1,1,-1,1],
+                [-1,-1,1,1],[1,-1,1,1],[1,1,1,1],[-1,1,1,1]
+            ];
+
+            const edges = [
+                [0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7],
+                [8,9],[9,10],[10,11],[11,8],[12,13],[13,14],[14,15],[15,12],[8,12],[9,13],[10,14],[11,15],
+                [0,8],[1,9],[2,10],[3,11],[4,12],[5,13],[6,14],[7,15]
+            ];
+
+            let angle4D = 0;
+
+            function render4D() {
+                requestAnimationFrame(render4D);
+                angle4D += 0.01;
+
+                // Clear previous lines
+                while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+
+                // Project 4D to 3D
+                let projected3D = nodes.map(v => {
+                    let x = v[0], y = v[1], z = v[2], w = v[3];
+                    // Rotate in XW plane
+                    let cos = Math.cos(angle4D), sin = Math.sin(angle4D);
+                    let rx = x * cos - w * sin;
+                    let rw = x * sin + w * cos;
+                    
+                    let distance = 2;
+                    let wFactor = 1 / (distance - rw * 0.3);
+                    return new THREE.Vector3(rx * wFactor, y * wFactor, z * wFactor);
+                });
+
+                // Render Edges
+                edges.forEach(e => {
+                    const material = new THREE.LineBasicMaterial({ color: 0x38bdf8 });
+                    const geometry = new THREE.BufferGeometry().setFromPoints([projected3D[e[0]], projected3D[e[1]]]);
+                    const line = new THREE.Line(geometry, material);
+                    scene.add(line);
+                });
+
+                renderer.render(scene, camera);
+            }
+            render4D();
+        }
+
+        /* --- 3. MATH FUNCTION GRAPHER --- */
+        function drawGraph() {
+            const gCanvas = document.getElementById('graphCanvas');
+            gCanvas.width = gCanvas.clientWidth;
+            gCanvas.height = gCanvas.clientHeight;
+            const ctx = gCanvas.getContext('2d');
+
+            ctx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+            
+            // Draw Axes
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, gCanvas.height / 2); ctx.lineTo(gCanvas.width, gCanvas.height / 2);
+            ctx.moveTo(gCanvas.width / 2, 0); ctx.lineTo(gCanvas.width / 2, gCanvas.height);
+            ctx.stroke();
+
+            // Plot Curve
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+
+            const funcType = document.getElementById('funcSelect').value;
+            const cx = gCanvas.width / 2;
+            const cy = gCanvas.height / 2;
+            const scale = 40;
+
+            for (let px = 0; px < gCanvas.width; px++) {
+                let x = (px - cx) / scale;
+                let y = 0;
+
+                if (funcType === 'sin') y = Math.sin(x);
+                else if (funcType === 'square') y = x * x;
+                else if (funcType === 'wave') y = Math.sin(x) + Math.cos(x * 2);
+
+                let py = cy - y * scale;
+                if (px === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        }
+
+        document.getElementById('funcSelect').addEventListener('change', drawGraph);
+    </script>
+</body>
+</html>

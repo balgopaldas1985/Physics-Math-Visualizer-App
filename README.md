@@ -1,1 +1,0 @@
-# Physics-Math-Visualizer-App
